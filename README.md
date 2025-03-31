@@ -1,6 +1,6 @@
 # URL Shortener Service
 
-> **Note**: This project was created using Mission Control Pane (MCP) GitHub server integration, demonstrating automated repository management and code deployment capabilities.
+> **Note**: This project was created using Model Context Protocol (MCP) GitHub server integration, demonstrating automated repository management and code deployment capabilities.
 
 A modern URL shortening service built with Node.js, Express, and MongoDB. This service allows users to create shortened URLs with optional custom slugs, tracks click analytics, and provides QR codes for easy sharing.
 
