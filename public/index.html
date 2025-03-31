@@ -78,10 +78,41 @@
         }
         .copy-btn {
             background-color: #27ae60;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: auto;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             margin-top: 10px;
         }
         .copy-btn:hover {
             background-color: #219a52;
+        }
+        .copy-btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .copy-btn.success {
+            background-color: #27ae60;
+        }
+        .copy-btn.error {
+            background-color: #e74c3c;
+        }
+        .copy-feedback {
+            font-size: 14px;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .copy-feedback.show {
+            opacity: 1;
         }
         .loading {
             display: inline-block;
@@ -96,6 +127,27 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 5px;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .toast.success {
+            background-color: #27ae60;
+        }
+        .toast.error {
+            background-color: #e74c3c;
+        }
+        .toast.show {
+            opacity: 1;
         }
     </style>
 </head>
@@ -120,10 +172,106 @@
         <div id="result"></div>
     </div>
 
+    <!-- Toast notification -->
+    <div id="toast" class="toast"></div>
+
     <script>
         const form = document.getElementById('urlForm');
         const submitBtn = document.getElementById('submitBtn');
         const resultDiv = document.getElementById('result');
+        const toast = document.getElementById('toast');
+
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            
+            // Force reflow to restart animation
+            void toast.offsetWidth;
+            
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Copy text to clipboard with fallback
+        async function copyToClipboard(text, button) {
+            // Decode the URL if it's encoded
+            const decodedText = decodeURIComponent(text);
+            
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    // Use the modern Clipboard API
+                    await navigator.clipboard.writeText(decodedText);
+                    updateCopyButton(button, true);
+                } else {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = decodedText;
+                    
+                    // Make the textarea invisible but accessible
+                    Object.assign(textArea.style, {
+                        position: 'fixed',
+                        top: '0',
+                        left: '0',
+                        width: '2em',
+                        height: '2em',
+                        padding: 0,
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: 'none',
+                        background: 'transparent',
+                        opacity: 0
+                    });
+                    
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+
+                    try {
+                        const success = document.execCommand('copy');
+                        if (!success) throw new Error('Copy command failed');
+                        updateCopyButton(button, true);
+                    } catch (err) {
+                        console.error('Fallback: Oops, unable to copy', err);
+                        updateCopyButton(button, false);
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                updateCopyButton(button, false);
+            }
+        }
+
+        // Update copy button state
+        function updateCopyButton(button, success) {
+            if (!button) return;
+            
+            const originalText = 'Copy URL';
+            const successText = '✓ Copied!';
+            const errorText = '✗ Failed to copy';
+            
+            button.disabled = true;
+            if (success) {
+                button.textContent = successText;
+                button.className = 'copy-btn success';
+                showToast('URL copied to clipboard!', 'success');
+            } else {
+                button.textContent = errorText;
+                button.className = 'copy-btn error';
+                showToast('Failed to copy. Try selecting and copying manually.', 'error');
+            }
+            
+            setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+                button.className = 'copy-btn';
+            }, 2000);
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -159,24 +307,33 @@
 
                 if (response.ok) {
                     resultDiv.className = 'success';
+                    const shortUrl = data.shortUrl;
                     resultDiv.innerHTML = `
                         <div class="short-url">
                             <strong>Shortened URL:</strong><br>
-                            <a href="${data.shortUrl}" target="_blank">${data.shortUrl}</a>
+                            <a href="${shortUrl}" target="_blank" id="shortUrl">${shortUrl}</a>
                         </div>
-                        <button class="copy-btn" onclick="copyToClipboard('${data.shortUrl}')">
+                        <button type="button" class="copy-btn" onclick="copyToClipboard('${shortUrl}', this)">
                             Copy URL
                         </button>
                         <div class="qr-code">
                             <img src="${data.qrCode}" alt="QR Code" width="150">
                         </div>
                     `;
+
+                    // Add click event listener to the copy button
+                    const copyBtn = resultDiv.querySelector('.copy-btn');
+                    copyBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        copyToClipboard(shortUrl, copyBtn);
+                    });
                 } else {
                     throw new Error(data.error || 'Failed to shorten URL');
                 }
             } catch (err) {
                 resultDiv.className = 'error';
                 resultDiv.textContent = err.message || 'An error occurred while shortening the URL';
+                showToast(err.message || 'An error occurred while shortening the URL', 'error');
             } finally {
                 // Reset button state
                 submitBtn.disabled = false;
@@ -184,57 +341,6 @@
                 resultDiv.style.display = 'block';
             }
         });
-
-        function copyToClipboard(text) {
-            // Try to use the clipboard API
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).then(() => {
-                    updateCopyButton('Copied!');
-                }).catch(() => {
-                    // Fallback for clipboard API failure
-                    fallbackCopyToClipboard(text);
-                });
-            } else {
-                // Fallback for non-HTTPS or unsupported browsers
-                fallbackCopyToClipboard(text);
-            }
-        }
-
-        function fallbackCopyToClipboard(text) {
-            // Create a temporary textarea
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            
-            // Avoid scrolling to bottom
-            textArea.style.top = '0';
-            textArea.style.left = '0';
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            try {
-                // Execute the copy command
-                document.execCommand('copy');
-                updateCopyButton('Copied!');
-            } catch (err) {
-                console.error('Failed to copy:', err);
-                updateCopyButton('Failed to copy');
-            }
-            
-            document.body.removeChild(textArea);
-        }
-
-        function updateCopyButton(text) {
-            const copyBtn = document.querySelector('.copy-btn');
-            const originalText = 'Copy URL';
-            copyBtn.textContent = text;
-            setTimeout(() => {
-                copyBtn.textContent = originalText;
-            }, 2000);
-        }
     </script>
 </body>
 </html> 
