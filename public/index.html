@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        input[type="url"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        #result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        #result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .qr-code {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .short-url {
+            word-break: break-all;
+            margin-bottom: 10px;
+        }
+        .copy-btn {
+            background-color: #27ae60;
+            margin-top: 10px;
+        }
+        .copy-btn:hover {
+            background-color: #219a52;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>URL Shortener</h1>
+        <form id="urlForm">
+            <div class="input-group">
+                <label for="originalUrl">Enter your URL:</label>
+                <input type="url" id="originalUrl" name="originalUrl" required 
+                       placeholder="https://example.com">
+            </div>
+            <div class="input-group">
+                <label for="customSlug">Custom slug (optional):</label>
+                <input type="text" id="customSlug" name="customSlug" 
+                       placeholder="my-custom-url"
+                       pattern="[a-zA-Z0-9-_]+"
+                       title="Only letters, numbers, hyphens and underscores are allowed">
+            </div>
+            <button type="submit" id="submitBtn">Shorten URL</button>
+        </form>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('urlForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultDiv = document.getElementById('result');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span>Shortening...';
+            resultDiv.style.display = 'none';
+            
+            const originalUrl = document.getElementById('originalUrl').value;
+            const customSlug = document.getElementById('customSlug').value;
+
+            try {
+                // Validate URL format
+                try {
+                    new URL(originalUrl);
+                } catch (err) {
+                    throw new Error('Please enter a valid URL including http:// or https://');
+                }
+
+                const response = await fetch('/api/shorten', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        originalUrl,
+                        customSlug: customSlug || undefined
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.className = 'success';
+                    resultDiv.innerHTML = `
+                        <div class="short-url">
+                            <strong>Shortened URL:</strong><br>
+                            <a href="${data.shortUrl}" target="_blank">${data.shortUrl}</a>
+                        </div>
+                        <button class="copy-btn" onclick="copyToClipboard('${data.shortUrl}')">
+                            Copy URL
+                        </button>
+                        <div class="qr-code">
+                            <img src="${data.qrCode}" alt="QR Code" width="150">
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Failed to shorten URL');
+                }
+            } catch (err) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = err.message || 'An error occurred while shortening the URL';
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Shorten URL';
+                resultDiv.style.display = 'block';
+            }
+        });
+
+        function copyToClipboard(text) {
+            // Try to use the clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    updateCopyButton('Copied!');
+                }).catch(() => {
+                    // Fallback for clipboard API failure
+                    fallbackCopyToClipboard(text);
+                });
+            } else {
+                // Fallback for non-HTTPS or unsupported browsers
+                fallbackCopyToClipboard(text);
+            }
+        }
+
+        function fallbackCopyToClipboard(text) {
+            // Create a temporary textarea
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            
+            // Avoid scrolling to bottom
+            textArea.style.top = '0';
+            textArea.style.left = '0';
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                // Execute the copy command
+                document.execCommand('copy');
+                updateCopyButton('Copied!');
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                updateCopyButton('Failed to copy');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        function updateCopyButton(text) {
+            const copyBtn = document.querySelector('.copy-btn');
+            const originalText = 'Copy URL';
+            copyBtn.textContent = text;
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+    </script>
+</body>
+</html> 

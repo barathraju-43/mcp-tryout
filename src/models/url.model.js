@@ -1,21 +1,35 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const urlSchema = new mongoose.Schema({
   originalUrl: {
     type: String,
-    required: true,
-    trim: true
+    required: [true, 'Original URL is required'],
+    trim: true,
+    validate: {
+      validator: function(v) {
+        try {
+          const urlObj = new globalThis.URL(v);
+          return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+        } catch (e) {
+          return false;
+        }
+      },
+      message: props => `${props.value} is not a valid URL! Please include http:// or https://`
+    }
   },
   shortCode: {
     type: String,
-    required: true,
+    required: [true, 'Short code is required'],
     unique: true,
-    trim: true
+    trim: true,
+    minlength: [3, 'Short code must be at least 3 characters long'],
+    maxlength: [50, 'Short code cannot exceed 50 characters']
   },
   clicks: {
     type: Number,
     required: true,
-    default: 0
+    default: 0,
+    min: [0, 'Clicks cannot be negative']
   },
   createdBy: {
     type: String,
@@ -23,14 +37,20 @@ const urlSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date,
-    default: () => new Date(+new Date() + 30*24*60*60*1000) // 30 days from now
+    default: () => new Date(+new Date() + 30*24*60*60*1000), // 30 days from now
+    validate: {
+      validator: function(v) {
+        return v > new Date();
+      },
+      message: 'Expiration date must be in the future!'
+    }
   }
 }, {
   timestamps: true
 });
 
-// Index for faster lookups
-urlSchema.index({ shortCode: 1 });
+// Indexes for faster lookups
+urlSchema.index({ shortCode: 1 }, { unique: true });
 urlSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Add methods to the schema
@@ -44,6 +64,6 @@ urlSchema.statics.findByShortCode = function(shortCode) {
   return this.findOne({ shortCode });
 };
 
-const URL = mongoose.model('URL', urlSchema);
+const UrlModel = mongoose.model('URL', urlSchema);
 
-module.exports = URL;
+export default UrlModel;

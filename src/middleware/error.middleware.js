@@ -1,6 +1,6 @@
-const logger = require('../utils/logger');
+import logger from '../utils/logger.js';
 
-const errorHandler = (err, req, res, next) => {
+export const errorHandler = (err, req, res, next) => {
   logger.error(err.stack);
 
   // Mongoose validation error
@@ -24,8 +24,4 @@ const errorHandler = (err, req, res, next) => {
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
-};
-
-module.exports = {
-  errorHandler
 };
